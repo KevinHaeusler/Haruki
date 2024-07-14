@@ -15,7 +15,7 @@ async def plex_activity(client):
         return "Invalid request."
     if not sessions:
         return "No active sessions."
-    result = ["Active Plex Sessions:"]
+    result = ["**Active Plex Sessions:**"]
     for session in sessions:
         result.append(get_session_info(session))
     return "\n".join(result)
