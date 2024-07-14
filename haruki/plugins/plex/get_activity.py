@@ -7,7 +7,7 @@ from .helper import get_session_info, make_api_call  # import the helper functio
 ALL = ClientWrapper(Kiruha)
 
 
-@ALL.interactions(is_global=True, wait_for_acknowledgement=True)
+@ALL.interactions(is_global=True)
 async def plex_activity(client):
     data = await make_api_call(client, 'get_activity')
     sessions = data.get('response', {}).get('data', {}).get('sessions', [])
