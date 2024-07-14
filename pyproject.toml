@@ -1,0 +1,18 @@
+[project]
+name = 'haruki'
+
+dependencies = [
+    'hata',
+    'hata[all]',
+]
+readme = 'README.md'
+requires-python = '>=3.6'
+
+dynamic = ['version', 'description', 'optional-dependencies']
+
+[build-system]
+build-backend = 'setuptools.build_meta'
+requires = ['setuptools', 'setuptools-scm']
+
+[project.scripts]
+haruki = 'haruki.cli:main'
