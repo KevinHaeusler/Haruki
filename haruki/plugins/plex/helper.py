@@ -3,7 +3,34 @@ from ...constants import TAUTULLI_TOKEN, TAUTULLI_URL
 
 def get_session_info(session):
     """
-    Reads session data and returns the formatted string. Used for the get_activity
+    Get session information.
+
+    This method takes a session object as input and returns a formatted string containing session information.
+
+    Parameters:
+    - session (dict): A dictionary representing the session object.
+
+    Returns:
+    - session_info (str): A formatted string containing session information.
+
+    Example usage:
+    ```
+    session = {
+        'user': 'John Doe',
+        'grandparent_title': 'Artist',
+        'parent_title': 'Album',
+        'title': 'Song',
+        'quality_profile': 'High',
+        'media_type': 'track'
+    }
+    info = get_session_info(session)
+    print(info)
+    ```
+
+    Output:
+    ```
+    **User:**  `John Doe    `  **Artist:**  `Artist`  **Album:**  `Album`  **Song:**  `Song`  **Quality:**  `High`
+    ```
     """
     user = session.get('user', 'Unknown User')
     grandparent_title = session.get('grandparent_title', '')
@@ -22,7 +49,19 @@ def get_session_info(session):
 
 async def make_api_call(client, api_call):
     """
-    Makes API call and retrieves the JSON response.
+
+    Parameters:
+    - client: The http client used to make the api call.
+    - api_call: The specific api call to be made.
+
+    Returns:
+    The data obtained from the api call.
+
+    Example usage:
+    client = aiohttp.ClientSession()
+    api_call = "get_users"
+    result = await make_api_call(client, api_call)
+
     """
     url = f"{TAUTULLI_URL}/api/v2?apikey={TAUTULLI_TOKEN}&cmd={api_call}"
     async with client.http.get(url) as response:
