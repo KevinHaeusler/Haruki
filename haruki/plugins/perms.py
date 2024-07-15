@@ -3,7 +3,7 @@ from hata import Embed
 from haruki.bots import Haruki
 
 
-@Haruki.interactions(is_global = True)
+@Haruki.interactions(is_global = True, show_for_invoking_user_only = True)
 async def perms(event):
     """Shows your permissions."""
     user_permissions = event.user_permissions
