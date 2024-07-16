@@ -39,10 +39,10 @@ def get_session_info(session):
     quality_profile = session.get('quality_profile', '')
     media_type = session.get('media_type', '')
     if media_type == 'track':
-        session_info = ("**User:**  `{:<10} `  **Artist:**  `{}`  **Album:**  `{}`  **Song:**  `{}`  **Quality:**  "
+        session_info = ("**User:**  `{:<15} `  **Artist:**  `{}`  **Album:**  `{}`  **Song:**  `{}`  **Quality:**  "
                         "`{}`".format(user, grandparent_title, parent_title, title, quality_profile))
     else:
-        session_info = ("**User:**  `{:<10} `  **Show:**  `{}`  **Season:**  `{}`  **Episode:**  `{}`  **Quality:**  "
+        session_info = ("**User:**  `{:<15} `  **Show:**  `{}`  **Season:**  `{}`  **Episode:**  `{}`  **Quality:**  "
                         "`{}`").format(user, grandparent_title, parent_title, title, quality_profile)
     return session_info
 
