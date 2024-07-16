@@ -28,18 +28,26 @@ async def get_search_results(media_type, media):
             for result in results:
                 actual_instance = result.actual_instance
                 if actual_instance.media_type == media_type:
+                    # if it's tv show
                     if media_type == 'tv':
-                        search_results.append({
-                            "id": actual_instance.id,
+                        search_result = {
+                            "id":    actual_instance.id,
                             "title": actual_instance.name,
-                            "year": actual_instance.first_air_date[:4] if actual_instance.first_air_date else None
-                        })
-                    else:
-                        search_results.append({
-                            "id": actual_instance.id,
+                            "year":  actual_instance.first_air_date[:4] if actual_instance.first_air_date else None
+                        }
+                    else:  # if it's something else
+                        search_result = {
+                            "id":    actual_instance.id,
                             "title": actual_instance.title,
-                            "year": actual_instance.release_date[:4] if actual_instance.release_date else None
-                        })
+                            "year":  actual_instance.release_date[:4] if actual_instance.release_date else None
+                        }
+                    # retrieving plexUrl if it already exists
+                    plex_url = actual_instance.media_info.additional_properties.get('plexUrl')
+                    if plex_url:
+                        plex_url = plex_url + ' '
+                        search_result['plexUrl'] = plex_url
+                    # append result to the search results list
+                    search_results.append(search_result)
 
             return search_results
         except Exception as e:
