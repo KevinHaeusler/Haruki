@@ -1,37 +1,28 @@
 __all__ = ()
 
 from haruki.bots import Kiruha
+from haruki.plugins.plex_request.overseer_search import get_search_results
 
-PLEX_REQUEST = Kiruha.interactions(None, name='plex-request', description='Plex request', is_global=True)
+CUSTOM_ID_REQUEST = 'request'
+CUSTOM_ID_ABORT = 'abort'
+PLEX_REQUEST_ID = 'plex_request'
 
-
-@PLEX_REQUEST.interactions(name='tv-show')
-async def tv_show():
-    yield
-    yield f'TV-Show'
-
-@PLEX_REQUEST.interactions(name='tv-movie')
-async def tv_movie():
-    yield
-    yield f'TV-Movie'
+MEDIA_TYPES = [
+    'tv',
+    'movie',
+]
 
 
-@PLEX_REQUEST.interactions(name='anime-show')
-async def anime_show():
-    yield
-    yield f'anime-Show'
+@Kiruha.interactions(is_global=True)
+async def plex_request(media_type: ('str', 'Pick Media Type'), media: ('str', 'Enter the media to search for')):
+    media_data = await get_search_results(media_type, media)
+    return media_data
 
-@PLEX_REQUEST.interactions(name='anime-movie')
-async def anime_movie():
-    yield
-    yield f'anime-Movie'
 
-@PLEX_REQUEST.interactions(name='foreign-show')
-async def foreign_show():
-    yield
-    yield f'foreign-Show'
+@plex_request.autocomplete('media_type')
+async def autocomplete_media_type(value):
+    if value is None:
+        return MEDIA_TYPES[:25]
 
-@PLEX_REQUEST.interactions(name='foreign-movie')
-async def foreign_movie():
-    yield
-    yield f'foreign-Movie'
+    value = value.casefold()
+    return [media_type for media_type in MEDIA_TYPES if (value in media_type)]

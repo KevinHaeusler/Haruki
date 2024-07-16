@@ -8,6 +8,6 @@ with EnvGetter() as env:
     KIRUHA_TOKEN = env.get_str('KIRUHA_TOKEN', raise_if_missing_or_empty = True)
     TAUTULLI_URL = env.get_str('TAUTULLI_URL', raise_if_missing_or_empty = True)
     TAUTULLI_TOKEN = env.get_str('TAUTULLI_TOKEN', raise_if_missing_or_empty = True)
-    OVERSEER_URL = env.get_str('OVERSEER_URL')
-    OVERSEER_TOKEN = env.get_str('OVERSEER_TOKEN')
+    OVERSEER_URL = env.get_str('OVERSEER_URL', raise_if_missing_or_empty = True)
+    OVERSEER_TOKEN = env.get_str('OVERSEER_TOKEN',raise_if_missing_or_empty = True)
 
