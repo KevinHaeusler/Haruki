@@ -4,6 +4,8 @@ from ...constants import OVERSEER_TOKEN, OVERSEER_URL
 headers = {"x-api-key": OVERSEER_TOKEN, "content-type": "application/json"}
 
 
+# TODO refactor as class
+
 async def get_search_results(media_type, media):
     params = {
         "page":     1,
