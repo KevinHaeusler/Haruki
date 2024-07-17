@@ -18,4 +18,5 @@ async def plex_activity(client):
     result = ["**Active Plex Sessions:**"]
     for session in sessions:
         result.append(get_session_info(session))
+        # TODO refactor to use embeds instead
     return "\n".join(result)
