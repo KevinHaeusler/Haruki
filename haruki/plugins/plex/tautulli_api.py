@@ -1,3 +1,5 @@
+from hata.ext.slash import abort
+
 from ...constants import TAUTULLI_TOKEN, TAUTULLI_URL
 
 
@@ -29,6 +31,18 @@ class TVShowActivityInfo(ActivityInfo):
         yield 'Episode', self.episode, False
 
 
+class TVMovieActivityInfo(ActivityInfo):
+    __slots__ = 'movie'
+
+    def __init__(self, user, quality, movie):
+        ActivityInfo.__init__(self, user, quality)
+        self.movie = movie
+
+    def iter_embed_field_values(self):
+        yield from ActivityInfo.iter_embed_field_values(self)
+        yield 'Movie', self.movie, False
+
+
 class MusicActivityInfo(ActivityInfo):
     __slots__ = ('artist', 'album', 'song')
 
@@ -49,10 +63,11 @@ async def get_activity_info(client):
     response = await make_api_call(client, 'get_activity')
 
     if response is None or not response.get('response', {}).get('data', {}).get('sessions'):
-        return "No active sessions."
+        return abort('No active sessions.')
 
     activity_info = []
     sessions = response['response']['data']['sessions']
+
     for session in sessions:
 
         if not isinstance(session, dict):
@@ -65,11 +80,16 @@ async def get_activity_info(client):
         title = session.get('title', 'Unknown Title')
         media_type = session.get('media_type', '')
 
-        if media_type == 'track':
-            session_info = MusicActivityInfo(user, quality_profile, grandparent_title, parent_title, title)
-        else:
-            session_info = TVShowActivityInfo(user, quality_profile, grandparent_title, parent_title, title)
+        media_type_to_class = {
+            'track':   lambda: MusicActivityInfo(user, quality_profile, grandparent_title, parent_title, title),
+            'episode': lambda: TVShowActivityInfo(user, quality_profile, grandparent_title, parent_title, title),
+            'movie':   lambda: TVMovieActivityInfo(user, quality_profile, title),
+        }
 
+        if media_type not in media_type_to_class:
+            return abort(f'Unknown media type: {media_type}')
+
+        session_info = media_type_to_class[media_type]()
         activity_info.append(session_info)
 
     return activity_info
