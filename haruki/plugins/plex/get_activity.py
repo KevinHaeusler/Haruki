@@ -47,6 +47,7 @@ async def build_activity_embed(client):
                     )
                 ]
             )
+        embed.add_image('https://i.imgur.com/BABpmZ3.png')
         embeds.append(embed)
 
     return embeds
