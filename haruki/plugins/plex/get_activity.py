@@ -27,8 +27,3 @@ async def build_activity_embed(client):
         embeds.append(embed)
 
     return embeds
-
-
-def block(title, value):
-    t = '`' * 3
-    return f'**{title}**\n{t}\n{value}\n{t}'
