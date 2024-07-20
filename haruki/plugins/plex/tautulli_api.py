@@ -48,32 +48,30 @@ class MusicActivityInfo(ActivityInfo):
 async def get_activity_info(client):
     response = await make_api_call(client, 'get_activity')
 
-    if response is None:
-        return "Invalid request."
-
-    response_data = response.get('response', {}).get('data', {})
-    sessions = response_data.get('sessions')
-
-    if not sessions:
+    if response is None or not response.get('response', {}).get('data', {}).get('sessions'):
         return "No active sessions."
 
     activity_info = []
+    sessions = response['response']['data']['sessions']
     for session in sessions:
-        if isinstance(session, dict):
-            user = session.get('user', 'Unknown User')
-            quality_profile = session.get('quality_profile', '')
-            media_type = session.get('media_type', '')
 
-            grandparent_title = session.get('grandparent_title', '')
-            parent_title = session.get('parent_title', '')
-            title = session.get('title', 'Unknown Title')
+        if not isinstance(session, dict):
+            continue
 
-            if media_type == 'track':
-                session_info = MusicActivityInfo(user, quality_profile, grandparent_title, parent_title, title)
-            else:
-                session_info = TVShowActivityInfo(user, quality_profile, grandparent_title, parent_title, title)
+        user = session.get('user', 'Unknown User')
+        quality_profile = session.get('quality_profile', '')
+        grandparent_title = session.get('grandparent_title', '')
+        parent_title = session.get('parent_title', '')
+        title = session.get('title', 'Unknown Title')
+        media_type = session.get('media_type', '')
 
-            activity_info.append(session_info)
+        if media_type == 'track':
+            session_info = MusicActivityInfo(user, quality_profile, grandparent_title, parent_title, title)
+        else:
+            session_info = TVShowActivityInfo(user, quality_profile, grandparent_title, parent_title, title)
+
+        activity_info.append(session_info)
+
     return activity_info
 
 
