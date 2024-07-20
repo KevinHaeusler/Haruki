@@ -30,6 +30,10 @@ class TVShowActivityInfo(ActivityInfo):
         yield 'Season', self.season, False
         yield 'Episode', self.episode, False
 
+    @classmethod
+    def from_data(cls, user, quality_profile, grandparent_title, parent_title, title):
+        return cls(user, quality_profile, grandparent_title, parent_title, title)
+
 
 class TVMovieActivityInfo(ActivityInfo):
     __slots__ = 'movie'
@@ -41,6 +45,10 @@ class TVMovieActivityInfo(ActivityInfo):
     def iter_embed_field_values(self):
         yield from ActivityInfo.iter_embed_field_values(self)
         yield 'Movie', self.movie, False
+
+    @classmethod
+    def from_data(cls, user, quality_profile, title):
+        return cls(user, quality_profile, title)
 
 
 class MusicActivityInfo(ActivityInfo):
@@ -57,6 +65,10 @@ class MusicActivityInfo(ActivityInfo):
         yield 'Artist', self.artist, False
         yield 'Album', self.album, False
         yield 'Song', self.song, False
+
+    @classmethod
+    def from_data(cls, user, quality_profile, grandparent_title, parent_title, title):
+        return cls(user, quality_profile, grandparent_title, parent_title, title)
 
 
 async def get_activity_info(client):
@@ -81,15 +93,16 @@ async def get_activity_info(client):
         media_type = session.get('media_type', '')
 
         media_type_to_class = {
-            'track':   lambda: MusicActivityInfo(user, quality_profile, grandparent_title, parent_title, title),
-            'episode': lambda: TVShowActivityInfo(user, quality_profile, grandparent_title, parent_title, title),
-            'movie':   lambda: TVMovieActivityInfo(user, quality_profile, title),
+            'track':   MusicActivityInfo,
+            'episode': TVShowActivityInfo,
+            'movie':   TVMovieActivityInfo,
         }
 
         if media_type not in media_type_to_class:
             return abort(f'Unknown media type: {media_type}')
 
-        session_info = media_type_to_class[media_type]()
+        ActivityClass = media_type_to_class[media_type]
+        session_info = ActivityClass.from_data(user, quality_profile, grandparent_title, parent_title, title)
         activity_info.append(session_info)
 
     return activity_info
