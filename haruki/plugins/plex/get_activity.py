@@ -2,7 +2,7 @@ __all__ = ()
 
 from hata import ClientWrapper
 from haruki.bots import Kiruha
-from .helper import get_session_info, make_api_call  # import the helper function
+from .tautulli_api import get_session_info, make_api_call  # import the helper function
 
 ALL = ClientWrapper(Kiruha)
 
