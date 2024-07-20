@@ -2,7 +2,7 @@ __all__ = ()
 
 from hata import Embed, EmbedField
 
-from haruki.bots import Kiruha
+from ...bots import Kiruha
 from .tautulli_api import get_activity_info
 
 
