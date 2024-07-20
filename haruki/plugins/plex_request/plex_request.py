@@ -41,15 +41,15 @@ async def initiate_plex_request(
             options.append(Option(str(id), title))
     # Create the Select
     select = [
-        Row(
-            Select(
-                options,
-                custom_id=PLEX_REQUEST_ID, )
+        Select(
+            options,
+            custom_id=PLEX_REQUEST_ID,
         ),
-        Row(
+        [
             Button('Request', custom_id=PLEX_REQUEST_REQUEST, style=ButtonStyle.green),
             Button('Abort', custom_id=PLEX_REQUEST_ABORT, style=ButtonStyle.red)
-        )]
+        ]
+    ]
     return InteractionResponse(embed=embed, components=select)
 
 
@@ -81,15 +81,15 @@ async def handle_media_selection(event):
             else:
                 options.append(Option(str(id), title))
     select = [
-        Row(
-            Select(
-                options,
-                custom_id=PLEX_REQUEST_ID, )
+        Select(
+            options,
+            custom_id=PLEX_REQUEST_ID,
         ),
-        Row(
+        [
             Button('Request', custom_id=PLEX_REQUEST_REQUEST, style=ButtonStyle.green),
             Button('Abort', custom_id=PLEX_REQUEST_ABORT, style=ButtonStyle.red)
-        )]
+        ]
+    ]
     media_info = await media_search.get_media_info(media_type, selected_media)
     url = tmdb_image_url + media_info['posterPath']
     embed = Embed(f'{media_info["title"]} - {media_info["year"].split("-")[0]}')
@@ -99,6 +99,7 @@ async def handle_media_selection(event):
         f'{media_info["overview"]} \n')
 
     yield InteractionResponse(embed=embed, components=select)
+
 
 @Kiruha.interactions(custom_id=[PLEX_REQUEST_REQUEST])
 async def send_plex_request(client, event):
@@ -111,6 +112,7 @@ async def send_plex_request(client, event):
     await media_search.request_selected_media(media_type, id)
     return
 
+
 @Kiruha.interactions(custom_id=[PLEX_REQUEST_ABORT])
 async def abort_plex_request(client, event):
     # Allow closing for the source user
@@ -120,5 +122,3 @@ async def abort_plex_request(client, event):
     # We can use `yield` as well for acknowledging it.
     await client.interaction_component_acknowledge(event)
     await client.interaction_response_message_delete(event)
-
-
