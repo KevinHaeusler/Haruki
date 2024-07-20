@@ -1,9 +1,15 @@
 __all__ = ()
 
-from hata import Embed, EmbedField
+from hata import Embed, EmbedField, Color
 
 from ...bots import Kiruha
 from .tautulli_api import get_activity_info
+
+media_type_to_color = {
+    'MusicActivityInfo':   Color(0x0000ff),  # Blue
+    'TVShowActivityInfo': Color(0x00ff00),  # Green
+    'TVMovieActivityInfo':   Color(0xff0000),  # Red
+}
 
 
 @Kiruha.interactions(is_global=True)
@@ -18,7 +24,9 @@ async def build_activity_embed(client):
     TRIPLE_GRAVE = '`' * 3
 
     for activity_info in activity_infos:
-        embed = Embed("Active Plex Session")
+        media_type = activity_info.__class__.__name__
+        color = media_type_to_color.get(media_type, Color(0xFFFFFF))
+        embed = Embed("Active Plex Session", color=color)
 
         for name, value, inline in activity_info.iter_embed_field_values():
             embed.add_field(name, f'{TRIPLE_GRAVE}\n{value}\n{TRIPLE_GRAVE}', inline)
