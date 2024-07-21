@@ -6,9 +6,9 @@ from ...bots import Kiruha
 from .tautulli_api import get_activity_info
 
 media_type_to_color = {
-    'MusicActivityInfo':   Color(0x0000ff),  # Blue
-    'TVShowActivityInfo': Color(0x00ff00),  # Green
-    'TVMovieActivityInfo':   Color(0xff0000),  # Red
+    'MusicActivityInfo':   Color(0x3498db),  # Blue
+    'TVShowActivityInfo': Color(0x2ecc71),  # Green
+    'TVMovieActivityInfo':   Color(0xe74c3c),  # Red
 }
 
 
