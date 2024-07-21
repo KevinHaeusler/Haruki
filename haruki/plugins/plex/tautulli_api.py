@@ -70,6 +70,7 @@ class MusicActivityInfo(ActivityInfo):
     def from_data(cls, user, quality_profile, grandparent_title, parent_title, title):
         return cls(user, quality_profile, grandparent_title, parent_title, title)
 
+
 def process_track_params(data):
     return data[0], data[1], data[2], data[3], data[4]
 
@@ -83,11 +84,14 @@ def process_episode_params(data):
 def process_movie_params(data):
     return data[0], data[1], data[4]
 
+
 media_type_to_class = {
     'track':   (MusicActivityInfo.from_data, process_track_params),
     'episode': (TVShowActivityInfo.from_data, process_episode_params),
     'movie':   (TVMovieActivityInfo.from_data, process_movie_params),
 }
+
+
 async def get_activity_info(client):
     response = await make_api_call(client, 'get_activity')
 
