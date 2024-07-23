@@ -34,11 +34,10 @@ class StatsInfo:
     def iter_embed_field_values(self):
         """Form data for custom embedding."""
         yield "Title", self.title, True
-        yield "Year", self.year, False
-        yield "Thumb", self.thumb, False
+        yield "Year", self.year, True
         yield "Media Type", self.media_type, False
         if self.data_index % 2 == 0:  # even index
-            yield "Total Duration", self.total_duration, False
+            yield "Total Duration", self.total_duration, True
         else:
-            yield "Total Plays", self.total_plays, True
             yield "Users Watched", self.users_watched, True
+        yield "Total Plays", self.total_plays, True
