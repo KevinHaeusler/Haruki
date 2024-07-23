@@ -1,4 +1,4 @@
-__all__ = ('main',)
+__all__ = ("main",)
 
 
 def main():
@@ -6,9 +6,9 @@ def main():
         from hata.main import execute_command_from_system_parameters
     except ImportError as err:
         raise ImportError(
-            'Couldn\'t import hata. '
-            'Are you sure it\'s installed and available on your PYTHONPATH environment variable? '
-            'Did you forget to activate a virtual environment?'
+            "Couldn't import hata. "
+            "Are you sure it's installed and available on your PYTHONPATH environment variable? "
+            "Did you forget to activate a virtual environment?"
         ) from err
 
     from hata.ext.plugin_auto_reloader import start_auto_reloader, warn_auto_reloader_availability
@@ -17,7 +17,7 @@ def main():
 
     from . import bots
 
-    register_plugin(f'{__spec__.parent}.plugins')
+    register_plugin(f"{__spec__.parent}.plugins")
 
     try:
         load_all_plugin()

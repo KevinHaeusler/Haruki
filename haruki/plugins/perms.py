@@ -3,14 +3,14 @@ from hata import Embed
 from haruki.bots import Haruki
 
 
-@Haruki.interactions(is_global = True, show_for_invoking_user_only = True)
+@Haruki.interactions(is_global=True, show_for_invoking_user_only=True)
 async def perms(event):
     """Shows your permissions."""
     user_permissions = event.user_permissions
     if user_permissions:
-        description = '\n'.join(permission_name.replace('_', '-') for permission_name in user_permissions)
+        description = "\n".join(permission_name.replace("_", "-") for permission_name in user_permissions)
     else:
-        description = '*none*'
+        description = "*none*"
 
     user = event.user
-    return Embed('Permissions', description).add_author(user.full_name, user.avatar_url)
+    return Embed("Permissions", description).add_author(user.full_name, user.avatar_url)

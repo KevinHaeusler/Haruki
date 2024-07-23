@@ -1,61 +1,59 @@
 __all__ = ()
 
-from hata import Embed, EmbedField
+from typing import Annotated
+
+from hata import Embed
+from hata.ext.slash import P
 
 from .tautulli_api import get_stats_info
 from ...bots import Kiruha
 
-STAT_CHOICES = [
-    'tv',
-    'movies',
-    'music',
-]
+STAT_CHOICES = {
+    "movies": 0,
+    "tv": 2,
+    "music": 4,
+}
 
-STAT_SPECIFICATION = [
-    'top',
-    'popular'
-]
+STAT_SPECIFICATION = {"top": 0, "popular": 1}
+
+TITLE = {0: "Most Watched Movie",
+         1: "Most Popular Movie",
+         2: "Most Watched TV Series",
+         3: "Most Popular TV Series",
+         4: "Most Played Artist",
+         5: "Most Popular Artist", }
 
 
 @Kiruha.interactions(is_global=True)
 async def plex_stats(
         client,
-        stat_choice: (STAT_CHOICES, 'Pick which stats you want to see'),
-        stat_specification: (STAT_SPECIFICATION, 'Choose which stats you want to see'),
+        stat_choice: (STAT_CHOICES, "Pick which stats you want to see"),
+        stat_specification: (STAT_SPECIFICATION, "Choose which stats you want to see"),
+        results: Annotated[int, P('int', 'How many results?', min_value=1, max_value=10)] = 3,
+        days: Annotated[int, P('int', 'From how many days?', min_value=1, max_value=1000)] = 30,
 ):
-    embed = await build_activity_embed(client, stat_choice, stat_specification)
+    embed = await build_activity_embed(client, stat_choice, stat_specification, results, days)
     return embed
 
 
-async def build_activity_embed(client, stat_choice, stat_specification):
-    stat_infos = await get_stats_info(client, stat_choice)
+async def build_activity_embed(client, stat_choice, stat_specification, results, days):
+    data_index = stat_choice + stat_specification
+    stat_infos = await get_stats_info(client, data_index)
+    embeds = []
+    count = 1
+    TRIPLE_GRAVE = "`" * 3
 
-    # Flatten stat_infos to ensure we're dealing with StatsInfo instances
-    flat_stat_infos = [item for sublist in stat_infos for item in sublist]
-    if True:
-        return await build_movies_embed(flat_stat_infos, stat_specification)
+    print(f'{stat_infos =}')
+    for info in stat_infos:
+        embed = Embed(
+            f'#{count} {TITLE[data_index]} in the last {days} days'
+        )
+        for name, value, inline in info.iter_embed_field_values():
+            embed.add_field(name, f"{TRIPLE_GRAVE}\n{value}\n{TRIPLE_GRAVE}", inline)
+        print(f'https://10.10.30.130:32400{info.thumb}')
+        embed.add_image("https://i.imgur.com/BABpmZ3.png")
 
-async def build_movies_embed(flat_stat_infos, stat_specification):
-    fields = []
-    counter = 0
-    for stat_info in flat_stat_infos:
-        if stat_info is None:
-            continue
+        embeds.append(embed)
+        count += 1
 
-        if stat_specification in stat_info.stat_id:
-            counter += 1
-            field_data = ""
-            for name, value, inline in list(stat_info.iter_embed_field_values())[2:]:
-                field_data += f'{name}: \t\t{value}\n'
-
-            fields.append(
-                EmbedField(
-                    f'#{counter} {"Most Watched" if stat_specification == "top" else "Most Popular"} Movie', field_data,
-                    False
-                )
-            )
-
-    embed = Embed(description=f'{stat_specification.title()}', fields=fields)
-    embed.add_image('https://i.imgur.com/BABpmZ3.png')
-
-    return embed
+    return embeds
