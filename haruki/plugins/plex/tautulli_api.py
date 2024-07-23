@@ -14,13 +14,14 @@ media_type_to_class = {
 
 async def make_api_call(client, api_call):
     url = f"{TAUTULLI_URL}/api/v2?apikey={TAUTULLI_TOKEN}&cmd={api_call}"
+    print(f'{url = }')
     async with client.http.get(url) as response:
         data = await response.json()
     return data
 
 
 async def get_activity_info(client):
-    response = await make_api_call(client, "get_activity&time_range=365")
+    response = await make_api_call(client, "get_activity")
     if response is None or not response.get("response", {}).get("data", {}).get("sessions"):
         return abort("No active sessions.")
 
@@ -49,24 +50,24 @@ def _process_session_info(session):
     return ActivityClass(data)
 
 
-async def get_stats_info(client, data_index):
-    response = await make_api_call(client, "get_home_stats")
+async def get_stats_info(client, data_index, results, days):
+    response = await make_api_call(client, f"get_home_stats&time_range={days}")
 
     if response is None or not response.get("response", {}).get("data", {}):
         return abort("No stats available.")
 
     stats_data = response["response"]["data"][data_index]  # directly select the relevant data
 
-    return _process_stats_info(stats_data, data_index)
+    return _process_stats_info(stats_data, data_index, results)
 
 
-def _process_stats_info(stat_data, data_index):
+def _process_stats_info(stat_data, data_index, results):
     stat_row_data = stat_data.get("rows", [])
     stat_infos = []
 
     for row in stat_row_data:
-        if 'total_plays' not in row:
-            continue  # skip rows with missing 'total_plays'
+        if len(stat_infos) >= results:
+            break
         stat_infos.append(StatsInfo.from_row(row, data_index))
 
     return stat_infos

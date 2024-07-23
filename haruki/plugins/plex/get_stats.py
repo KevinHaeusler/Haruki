@@ -38,19 +38,17 @@ async def plex_stats(
 
 async def build_activity_embed(client, stat_choice, stat_specification, results, days):
     data_index = stat_choice + stat_specification
-    stat_infos = await get_stats_info(client, data_index)
+    stat_infos = await get_stats_info(client, data_index, results, days)
     embeds = []
     count = 1
     TRIPLE_GRAVE = "`" * 3
 
-    print(f'{stat_infos =}')
     for info in stat_infos:
         embed = Embed(
             f'#{count} {TITLE[data_index]} in the last {days} days'
         )
         for name, value, inline in info.iter_embed_field_values():
             embed.add_field(name, f"{TRIPLE_GRAVE}\n{value}\n{TRIPLE_GRAVE}", inline)
-        print(f'https://10.10.30.130:32400{info.thumb}')
         embed.add_image("https://i.imgur.com/BABpmZ3.png")
 
         embeds.append(embed)
