@@ -35,7 +35,6 @@ class StatsInfo:
         """Form data for custom embedding."""
         yield "Title", self.title, True
         yield "Year", self.year, True
-        yield "Media Type", self.media_type, False
         if self.data_index % 2 == 0:  # even index
             yield "Total Duration", self.total_duration, True
         else:

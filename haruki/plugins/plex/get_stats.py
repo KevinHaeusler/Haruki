@@ -50,7 +50,6 @@ async def build_activity_embed(client, stat_choice, stat_specification, results,
         for name, value, inline in info.iter_embed_field_values():
             embed.add_field(name, f"{TRIPLE_GRAVE}\n{value}\n{TRIPLE_GRAVE}", inline)
         embed.add_image("https://i.imgur.com/BABpmZ3.png")
-
         embeds.append(embed)
         count += 1
 
