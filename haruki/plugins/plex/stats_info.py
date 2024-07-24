@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from typing import Optional
 
+SECTION_ID_MAPPING = {1: "TV Movie", 2: "TV", 3: "Music"}
+
 
 @dataclass(slots=True)
 class StatsInfo:
@@ -31,10 +33,14 @@ class StatsInfo:
     def from_row(cls, row: dict, data_index: int):
         return cls(**row, data_index=data_index)
 
+    def get_section(self):
+        return SECTION_ID_MAPPING.get(self.section_id, "Unknown")
+
     def iter_embed_field_values(self):
         """Form data for custom embedding."""
         yield "Title", self.title, True
         yield "Year", self.year, True
+        yield "Library", self.get_section(), False
         if self.data_index % 2 == 0:  # even index
             yield "Total Duration", self.total_duration, True
         else:
