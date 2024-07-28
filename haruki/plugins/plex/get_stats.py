@@ -26,6 +26,11 @@ TITLE = {0: "Most Watched Movie",
          4: "Most Played Artist",
          5: "Most Popular Artist", }
 
+WITH_IMAGES = {
+    "no": 0,
+    "yes": 1,
+}
+
 
 @Kiruha.interactions(is_global=True)
 async def plex_stats(
@@ -34,16 +39,51 @@ async def plex_stats(
         stat_choice: (STAT_CHOICES, "Pick which stats you want to see"),
         stat_specification: (STAT_SPECIFICATION, "Choose which stats you want to see"),
         results: Annotated[int, P('int', 'How many results?', min_value=1, max_value=10)] = 3,
-        days: Annotated[int, P('int', 'From how many days?', min_value=1, max_value=1000)] = 30,
+        days: Annotated[int, P('int', 'From how many days?', min_value=1, max_value=1000)] = 30
 ):
     print(event.channel.id)
     yield
-    messages = await build_activity_embed(client, event, stat_choice, stat_specification, results, days)
-    for message in messages:
-        yield message
+    files, embeds = await build_stats_message(client, stat_choice, stat_specification, results, days)
+    print(files.keys())
+    yield {'embeds': embeds, 'files': files}
 
 
-async def build_activity_embed(client, event, stat_choice, stat_specification, results, days):
+async def build_stats_message(client, stat_choice, stat_specification, results, days):
+    data_index = stat_choice + stat_specification
+    stat_infos = await get_stats_info(client, data_index, results, days)
+    embeds = []
+    files = {}
+    count = 1
+
+    for info in stat_infos:
+        async with Kiruha.http.get(f'{TAUTULLI_IMAGE}{info.thumb}/pms_image_proxy.png') as response:
+            print(response.headers)
+            if response.status == 200:
+                data = await response.read()
+            else:
+                data = None
+
+        if data is None:
+            return abort("Oopsie Woopsie")
+        else:
+            image_url = f'attachment://thumb_{count}.png'
+            embed = Embed(
+                f'#{count} {TITLE[data_index]} in the last {days} days'
+            )
+            embed.add_image(image_url)
+            for name, value, inline in info.iter_embed_field_values():
+                embed.add_field(name, f"```\n{value}\n```", inline)
+
+            print(f'{TAUTULLI_IMAGE}{info.thumb}')
+            embeds.append(embed)
+            files[f'thumb_{count}.png'] = data
+
+            count += 1
+
+    return files, embeds
+
+
+async def build_stats_embed(client, event, stat_choice, stat_specification, results, days):
     data_index = stat_choice + stat_specification
     stat_infos = await get_stats_info(client, data_index, results, days)
     messages = []
@@ -60,8 +100,8 @@ async def build_activity_embed(client, event, stat_choice, stat_specification, r
             return abort("Oopsie Woopsie")
         else:
             image = Image.open(BytesIO(data))
-            image.save(f'thumb_{count}.png', "PNG")
-            image_url = f'attachment://thumb_{count}.png'
+            image.save(f'thumb_0{count}.png', "PNG")
+            image_url = f'attachment://thumb_0{count}.png'
             embed = Embed(
                 f'#{count} {TITLE[data_index]} in the last {days} days'
             )
@@ -69,8 +109,7 @@ async def build_activity_embed(client, event, stat_choice, stat_specification, r
             for name, value, inline in info.iter_embed_field_values():
                 embed.add_field(name, f"```\n{value}\n```", inline)
             # embed.add_image(f'{TAUTULLI_IMAGE}{info.thumb}')
-            print(f'{TAUTULLI_IMAGE}{info.thumb}')
-            messages.append(await Kiruha.message_create(event.channel.id, embed, file=(f'thumb_{count}.png', data)))
+            messages.append(await Kiruha.message_create(event.channel.id, embed, file=(f'thumb_0{count}.png', data)))
             # embeds.append(embed)
             count += 1
 
