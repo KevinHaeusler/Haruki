@@ -3,7 +3,7 @@ __all__ = ()
 from hata import Embed
 from hata.ext.slash import Select, Option, InteractionResponse, Button, ButtonStyle
 from haruki.bots import Kiruha
-from haruki.plugins.plex_request.overseer_search import MediaSearch
+from haruki.plugins.plex_request.overseer_api import search_media_by_name
 
 tmdb_image_url = "https://image.tmdb.org/t/p/w300_and_h450_face"
 
@@ -21,36 +21,18 @@ BUTTON_ABORT = Button("Abort", custom_id=PLEX_REQUEST_ABORT, style=ButtonStyle.r
 
 instances = {}
 
+global_results = {}
+
 
 @Kiruha.interactions(is_global=True, name="plex_request")
-async def initiate_plex_request(
-        event, media_type: (MEDIA_TYPES, "Pick Media Type"), media: ("str", 'Enter the media to search for')
-):
-    media_search = MediaSearch()
-    instances[event.user_id] = media_search
-    media_list = await media_search.get_search_results(media_type, media)
-    embed = Embed(f"Searching for {media_type.title()}: {media.title()}")
-    options = []
-    print(media_list)
-    for element in media_list:
-        name = element["title"]
-        year = element["year"]
-        id = element["id"]
-        if name:
-            title = f"{name} ({year})"
-            options.append(Option(str(id), title))
-    # Create the Select
-    select = [
-        Select(
-            options,
-            custom_id=PLEX_REQUEST_ID,
-        ),
-        [
-            Button("Request", custom_id=PLEX_REQUEST_REQUEST, style=ButtonStyle.green),
-            Button("Abort", custom_id=PLEX_REQUEST_ABORT, style=ButtonStyle.red),
-        ],
-    ]
-    return InteractionResponse(embed=embed, components=select)
+async def initiate_plex_request(client,
+                                event, media_type: (MEDIA_TYPES, "Pick Media Type"),
+                                media: ("str", 'Enter the media to search for')
+                                ):
+    results = await search_media_by_name(client, media_type, media)
+    global_results[event.user_id] = results  # use user_id as key
+
+    return "Lets go"
 
 
 @Kiruha.interactions(custom_id=[PLEX_REQUEST_REQUEST, PLEX_REQUEST_ID])
