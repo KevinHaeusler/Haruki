@@ -14,7 +14,6 @@ media_type_to_class = {
 
 async def make_api_call(client, api_call):
     url = f"{TAUTULLI_URL}/api/v2?apikey={TAUTULLI_TOKEN}&cmd={api_call}"
-    print(f'{url = }')
     async with client.http.get(url) as response:
         data = await response.json()
     return data
