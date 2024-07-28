@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Optional
 
-SECTION_ID_MAPPING = {1: "TV Movie", 2: "TV", 3: "Music"}
+SECTION_ID_MAPPING = {1: "TV Movie", 8: "TV Show", 5: "Music"}
 
 
 @dataclass(slots=True)
