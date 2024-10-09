@@ -86,7 +86,8 @@ async def initiate_plex_request(client,
     global_results[event.user_id] = results  # use user_id as key
     instances[event.user_id] = media_search
 
-    embed = Embed('Request')
+    embed = Embed(f'Requesting {media}')
+    embed.description = 'Please select your desired media from the list below'
     select = build_embed_list(results, selected_media=None)
     return InteractionResponse(embed=embed, components=select)
 
