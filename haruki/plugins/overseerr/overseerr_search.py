@@ -6,11 +6,13 @@ from icecream import ic
 
 from ...bots import Kiruha
 from ...constants import OVERSEER_TOKEN, OVERSEER_URL
+import json
+from scarletio import sleep
 
 
 class OverseerrSearch:
     def __init__(self):
-        self.headers = {"x-api-key": OVERSEER_TOKEN, "content-type": "application/json"}
+        self.headers = {"x-api-key": OVERSEER_TOKEN, "Content-Type": "application/json", "charset": "utf-8"}
         self.media_list = []
         self.cache = {}  # Cache to store media information
 
@@ -35,23 +37,48 @@ class OverseerrSearch:
         return api_response.get("results")
 
     async def discord_user_to_overseerr_user(self, discord_id):
-        users = await self.get_users()
-        for user in users:
+        for attempt in range(3):
             try:
-                # Attempt to fetch and cast discord_id_mapped to int
-                discord_id_mapped = await self.get_discord_id_from_overseerr_id(user.get("id"))
-                if discord_id_mapped is None:
-                    continue  # If discord_id_mapped is None, skip to the next user
+                users = await self.get_users()
+                for user in users:
+                    try:
+                        # Attempt to fetch and cast discord_id_mapped to int
+                        discord_id_mapped = await self.get_discord_id_from_overseerr_id(user.get("id"))
+                        if discord_id_mapped is None:
+                            continue  # If discord_id_mapped is None, skip to the next user
 
-                # Convert to int and compare with discord_id
-                if int(discord_id_mapped) == discord_id:
-                    return user.get("id")
+                        # Convert to int and compare with discord_id
+                        if int(discord_id_mapped) == discord_id:
+                            return user.get("id")
 
-            except (TypeError, ValueError):
-                # If there's a casting issue, just skip to the next user
-                continue
+                    except (TypeError, ValueError):
+                        # If there's a casting issue, just skip to the next user
+                        continue
 
-        return 34  # User Kiruha for the request
+                return 34  # Return default value if no user matches
+
+            except ConnectionError:
+                # Log the exception (or use an appropriate logging mechanism)
+                print(f"Connection error occurred, retrying... ({attempt + 1}/{3})")
+                await sleep(1)  # Introduce a delay before retrying
+
+        # After retries, return a fallback value or raise an exception
+        return None  # or raise an error if needed
+
+    async def request_selected_media(self, media_type, selected_id, overseer_id, seasons=1):
+        data = {
+            "mediaType": media_type,
+            "mediaId": int(selected_id),
+            "userId": int(overseer_id),
+            "seasons": "all"
+        }
+
+        encoded_data = json.dumps(data)
+        async with Kiruha.http.post(f"{OVERSEER_URL}/api/v1/request", self.headers, data=encoded_data) as response:
+            api_response = await response.json()
+            ic(response.headers)
+            ic(api_response)
+        return api_response
 
     async def get_discord_id_from_overseerr_id(self, overseer_id):
         async with Kiruha.http.get(f"{OVERSEER_URL}/api/v1/user/{overseer_id}/settings/notifications",

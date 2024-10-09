@@ -44,20 +44,31 @@ def build_embed_list(results, selected_media):
 
             else:
                 options.append(Option(str(id), title))
-    select = [
-        Select(
-            options,
-            custom_id=PLEX_REQUEST_ID,
-        ),
-        [
-            Button("Request", custom_id=PLEX_REQUEST_REQUEST, style=ButtonStyle.green),
-            Button("Abort", custom_id=PLEX_REQUEST_ABORT, style=ButtonStyle.red),
-        ],
-    ]
+    if selected_media is None:
+        select = [
+            Select(
+                options,
+                custom_id=PLEX_REQUEST_ID,
+            ),
+            [
+                Button("Abort", custom_id=PLEX_REQUEST_ABORT, style=ButtonStyle.red),
+            ],
+        ]
+    else:
+        select = [
+            Select(
+                options,
+                custom_id=PLEX_REQUEST_ID,
+            ),
+            [
+                Button("Request", custom_id=PLEX_REQUEST_REQUEST, style=ButtonStyle.green),
+                Button("Abort", custom_id=PLEX_REQUEST_ABORT, style=ButtonStyle.red),
+            ],
+        ]
     return select
 
 
-@Kiruha.interactions(is_global=True, name="pr")
+@Kiruha.interactions(is_global=True, name="plex-request")
 async def initiate_plex_request(client,
                                 event, media_type: (MEDIA_TYPES, "Pick Media Type"),
                                 media: ("str", 'Enter the media to search for')
@@ -135,14 +146,34 @@ async def send_plex_request(client, event):
 
     # Retrieve the last selected media for this user
     selected_media = last_selected_media.get(event.user_id)
-
+    media_search = instances.get(event.user_id)  # Retrieve the cached media_search instance
+    media_list = media_search.get_media_list()
     # ic the last selected media value for debugging
     ic(f"Last selected media: {selected_media}")
 
-    # media_type, id = event.message.embed.author.name.split()
-    # print(f"{media_type}: {id}")
-    # await media_search.request_selected_media(media_type, id)
-    return f"Your Overseerr ID is {overseer_id}"
+    for element in media_list:
+        if str(element["id"]) == str(selected_media):
+            media_type = element["media_type"]
+            break
+
+    media_info = await media_search.get_media_info(media_type, selected_media)
+    request = await overseer_instance.request_selected_media(media_type, selected_media, overseer_id)
+
+    # Handle media poster image
+    if media_info["posterPath"] is None:
+        url = "https://www.niwrc.org/sites/default/files/images/resource/missing_persons_flyer.jpeg"
+    else:
+        url = tmdb_image_url + media_info["posterPath"]
+
+    # Create embed with media information
+    embed = Embed(f'Request sent for: {media_info["title"]} ({media_info["year"].split("-")[0]})', color=0x9c5db3)
+    embed.add_thumbnail(url)
+    embed.description = f'{media_info["overview"]} \n'
+    embed.add_field("Requested By", event.user.name, True)
+    embed.add_field("Request Status", "Processing", True)
+    embed.add_field("Total Requests", request.get('requestedBy', {}).get('requestCount'), True)
+
+    return InteractionResponse(embed, components=None)
 
 
 @Kiruha.interactions(custom_id=[PLEX_REQUEST_ABORT])
