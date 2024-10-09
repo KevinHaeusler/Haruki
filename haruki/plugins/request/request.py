@@ -168,7 +168,7 @@ async def send_plex_request(client, event):
 
     # Create embed with media information
     embed = Embed(f'{media_info["title"]} ({media_info["year"].split("-")[0]})', color=0x9c5db3)
-    embed.author = 'Movie Request Sent'
+    embed.add_author('Movie Request Sent')
     embed.add_thumbnail(url)
     embed.description = f'{media_info["overview"]} \n'
     embed.add_field("Requested By", event.user.name, True)
