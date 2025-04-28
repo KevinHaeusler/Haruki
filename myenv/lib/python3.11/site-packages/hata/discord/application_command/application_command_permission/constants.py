@@ -1,0 +1,4 @@
+__all__ = ()
+
+
+PERMISSION_OVERWRITES_MAX = 100

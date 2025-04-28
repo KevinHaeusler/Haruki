@@ -173,7 +173,7 @@ async def send_plex_request(client, event):
     embed.description = f'{media_info["overview"]} \n'
     embed.add_field("Requested By", event.user.name, True)
     embed.add_field("Request Status", "Processing", True)
-    embed.add_field("Total Requests", request.get('requestedBy', {}).get('requestCount'), True)
+    embed.add_field("Total Requests", request.get('requestedBy', {}).get('requestCount') + 1, True)
 
     return InteractionResponse(embed, components=None)
 

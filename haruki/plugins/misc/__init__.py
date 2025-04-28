@@ -1,2 +1,4 @@
 from .speedtest import *
-__all__ = [*speedtest.__all__]
+from .get_diskspace import *
+
+__all__ = [*speedtest.__all__, *get_diskspace.__all__]

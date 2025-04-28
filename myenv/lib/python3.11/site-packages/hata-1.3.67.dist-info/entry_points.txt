@@ -1,0 +1,3 @@
+[console_scripts]
+hata = hata.__main__:__main__
+
