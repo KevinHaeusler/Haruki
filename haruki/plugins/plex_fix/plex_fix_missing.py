@@ -6,181 +6,191 @@ from icecream import ic
 
 from ...bots import Kiruha
 from ..api_helpers.sonarr_api import post_to_sonarr_api, get_from_sonarr_api
+from ..api_helpers.radarr_api import post_to_radarr_api, get_from_radarr_api
 
 PLEX_FIX_MISSING_SELECT_MEDIA = "plex_fix_missing_select_media"
 PLEX_FIX_MISSING_SELECT_SEASON = "plex_fix_missing_select_season"
+PLEX_FIX_MISSING_SELECT_EPISODE = "plex_fix_missing_select_episode"
+PLEX_FIX_MISSING_SELECT_RELEASE = "plex_fix_missing_select_release"
+PLEX_FIX_MISSING_CHANGE_RELEASE = "plex_fix_missing_change_release"
+PLEX_FIX_MISSING_APPROVE = "plex_fix_missing_approve"
 PLEX_FIX_MISSING_ABORT = "plex_fix_missing_abort"
 
 instances = {}
-last_selected_media = {}
-last_selected_season = {}
 
 MEDIA_TYPES = ["tv", "movie"]
 
 @Kiruha.interactions(is_global=True, name="plex-fix-missing")
-async def initiate_plex_fix_missing(client, event, media_type: (MEDIA_TYPES, "Pick Media Type"), media: ("str", "Enter the media to search for")):
+async def initiate_plex_fix_missing(client, event,
+    media_type: (MEDIA_TYPES, "Pick Media Type"),
+    media: ("str", "Enter the media to search for")):
+    # Initial search: series or missing movies
     await client.interaction_response_message_create(event, content='Searching...')
     ic(media_type, media)
+    is_movie = (media_type == "movie")
     search_results = []
 
-    if media_type == "tv":
-        series_list = await get_from_sonarr_api(client, "series")
-        search_results = [series for series in series_list if media.lower() in series.get("title", "").lower()]
+    if not is_movie:
+        series_list = await get_from_sonarr_api(client, "series") or []
+        search_results = [s for s in series_list if media.lower() in s.get('title', '').lower()]
     else:
-        await client.interaction_response_message_edit(event, content="Currently only TV search is supported.")
-        return
+        radarr_response = await get_from_radarr_api(
+            client,
+            "wanted/missing?page=1&pageSize=1000&monitored=true"
+        ) or {}
+        movie_list = radarr_response.get('records', [])
+        search_results = [m for m in movie_list if media.lower() in (m.get('title', '') or '').lower()]
 
     if not search_results:
-        await client.interaction_response_message_edit(event, content=f"No results found for '{media}'.")
+        await client.interaction_response_message_edit(event,
+            content=f"No results found for '{media}'.")
         return
 
-    options = [Option(str(series['id']), f"{series['title']} ({series.get('year', 'Unknown')})") for series in search_results]
+    options = []
+    for item in search_results[:25]:
+        title = item.get('title', 'Unknown')
+        label = title if len(title) <= 100 else title[:97] + '...'
+        options.append(Option(str(item['id']), label))
 
-    embed = Embed('Select Media', description='Select the media you want to fix')
     select = Select(options, custom_id=PLEX_FIX_MISSING_SELECT_MEDIA)
+    embed = Embed('Select Media', description='Choose media to fix')
+    instances[event.user_id] = {'is_movie': is_movie, 'search_results': search_results}
 
-    instances[event.user_id] = search_results
-
-    await client.interaction_response_message_edit(event, embed=embed, components=[select, [Button('Abort', custom_id=PLEX_FIX_MISSING_ABORT, style=ButtonStyle.red)]])
+    await client.interaction_response_message_edit(event, embed=embed,
+        components=[select, [Button('Abort', custom_id=PLEX_FIX_MISSING_ABORT, style=ButtonStyle.red)]])
 
 @Kiruha.interactions(custom_id=[PLEX_FIX_MISSING_SELECT_MEDIA])
 async def handle_media_selection(client, event):
     await client.interaction_component_acknowledge(event)
-    selected_media_id = event.values[0]
-    last_selected_media[event.user_id] = selected_media_id
-
-    media_list = instances.get(event.user_id, [])
-    selected_series = next((series for series in media_list if str(series['id']) == selected_media_id), None)
-
-    if not selected_series:
-        await client.interaction_response_message_edit(event, content="Selected media not found.")
+    session = instances.get(event.user_id, {})
+    search_results = session.get('search_results', [])
+    is_movie = session.get('is_movie', False)
+    choice = event.values[0]
+    item = next((i for i in search_results if str(i.get('id')) == choice), None)
+    if not item:
+        await client.interaction_response_message_edit(event, content="Media not found.")
         return
+    session['selected_media'] = item
 
-    episodes = await get_from_sonarr_api(client, f"episode?seriesId={selected_series['id']}")
-    missing_episodes = [ep for ep in episodes if not ep.get("hasFile")]
-
-    if not missing_episodes:
-        await client.interaction_response_message_edit(event, content=f"No missing episodes found for {selected_series['title']}.")
-        return
-
-    seasons = sorted(set(ep['seasonNumber'] for ep in missing_episodes))
-    options = [Option(str(season), f"Season {season}") for season in seasons]
-
-    embed = Embed('Select Season', description='Select a season to view missing episodes')
-    select = Select(options, custom_id=PLEX_FIX_MISSING_SELECT_SEASON)
-
-    instances[event.user_id] = missing_episodes
-
-    await client.interaction_response_message_edit(event, embed=embed, components=[select, [Button('Abort', custom_id=PLEX_FIX_MISSING_ABORT, style=ButtonStyle.red)]])
+    if is_movie:
+        await show_movie_releases(client, event, item)
+    else:
+        eps = await get_from_sonarr_api(client, f"episode?seriesId={item.get('id')}&missing=true") or []
+        session['missing_episodes'] = eps
+        seasons = sorted({ep.get('seasonNumber') for ep in eps})
+        options = [Option(str(se), f"Season {se}") for se in seasons]
+        embed = Embed('Select Season', description='Select season to inspect')
+        select = Select(options, custom_id=PLEX_FIX_MISSING_SELECT_SEASON)
+        await client.interaction_response_message_edit(event, embed=embed,
+            components=[select, [Button('Abort', custom_id=PLEX_FIX_MISSING_ABORT, style=ButtonStyle.red)]])
 
 @Kiruha.interactions(custom_id=[PLEX_FIX_MISSING_SELECT_SEASON])
 async def handle_season_selection(client, event):
     await client.interaction_component_acknowledge(event)
-    selected_season = int(event.values[0])
-    last_selected_season[event.user_id] = selected_season
+    season = int(event.values[0])
+    session = instances.get(event.user_id, {})
+    eps = session.get('missing_episodes', [])
+    selected_eps = [ep for ep in eps if ep['seasonNumber'] == season]
+    options = [Option(str(ep['id']), f"S{ep['seasonNumber']:02}E{ep['episodeNumber']:02} - {ep['title']}")
+               for ep in selected_eps[:25]]
+    embed = Embed('Select Episode', description='Choose an episode')
+    select = Select(options, custom_id=PLEX_FIX_MISSING_SELECT_EPISODE)
+    await client.interaction_response_message_edit(event, embed=embed,
+        components=[select, [Button('Abort', custom_id=PLEX_FIX_MISSING_ABORT, style=ButtonStyle.red)]])
 
-    missing_episodes = instances.get(event.user_id, [])
-    selected_episodes = [ep for ep in missing_episodes if ep['seasonNumber'] == selected_season]
-
-    options = [Option(str(ep['id']), f"S{ep['seasonNumber']}E{ep['episodeNumber']} - {ep['title']}") for ep in selected_episodes]
-
-    embed = Embed('Select Episode', description='Select an episode to search for releases')
-    select = Select(options, custom_id="plex_fix_missing_select_episode")
-
-    instances[event.user_id] = selected_episodes
-
-    await client.interaction_response_message_edit(event, embed=embed, components=[select, [Button('Abort', custom_id=PLEX_FIX_MISSING_ABORT, style=ButtonStyle.red)]])
-
-@Kiruha.interactions(custom_id=["plex_fix_missing_select_episode"])
+@Kiruha.interactions(custom_id=[PLEX_FIX_MISSING_SELECT_EPISODE])
 async def handle_episode_selection(client, event):
     await client.interaction_component_acknowledge(event)
-    selected_episode_id = event.values[0]
+    ep_id = event.values[0]
+    releases = await get_from_sonarr_api(client, f"release?episodeId={ep_id}") or []
+    instances[event.user_id]['releases'] = releases
+    await display_release_options(client, event, releases, is_movie=False)
 
-    releases = await get_from_sonarr_api(client, f"release?episodeId={selected_episode_id}")
-
-    valid_releases = []
-    for release in releases:
-        if release.get('customFormatScore', 0) >= 0:
-            valid_releases.append(release)
-
-    valid_releases = sorted(valid_releases, key=lambda r: r.get('qualityWeight', 0), reverse=True)[:20]
-
-    if not valid_releases:
-        await client.interaction_response_message_edit(event, content="No valid releases found.")
-        return
-
+async def display_release_options(client, event, releases, is_movie):
     options = []
-    for release in valid_releases:
-        title = release['title']
-        emoji = '✅' if release.get('approved') else '❌'
-        display_title = f"{emoji} {title}"
-        if len(display_title) > 100:
-            display_title = display_title[:97] + "..."
-        options.append(Option(release['guid'], display_title))
+    for rel in sorted(releases, key=lambda r: r.get('qualityWeight', 0) if not is_movie else r.get('customFormatScore', 0), reverse=True)[:25]:
+        emoji = '✅' if rel.get('approved') else '❌'
+        label = f"{emoji} {rel.get('title') or rel.get('movieTitles','')[0]}"
+        if len(label) > 100:
+            label = label[:97] + '...'
+        options.append(Option(rel['guid'], label))
+    title = 'Select Movie Release' if is_movie else 'Select Release'
+    desc = 'Choose a release to download'
+    embed = Embed(title, description=desc)
+    select = Select(options, custom_id=PLEX_FIX_MISSING_SELECT_RELEASE)
+    await client.interaction_response_message_edit(event, embed=embed,
+        components=[select, [
+            Button('Change', custom_id=PLEX_FIX_MISSING_CHANGE_RELEASE, style=ButtonStyle.blue),
+            Button('Abort', custom_id=PLEX_FIX_MISSING_ABORT, style=ButtonStyle.red)
+        ]])
 
-    embed = Embed('Select Release', description='Pick a release to view details')
-    select = Select(options, custom_id="plex_fix_missing_select_release")
+async def show_movie_releases(client, event, movie):
+    releases = await get_from_radarr_api(client, f"release?movieId={movie['id']}") or []
+    valid = [r for r in releases if not r.get('rejected') or r.get('customFormatScore', 0) > 0] or releases
+    instances[event.user_id]['releases'] = valid
+    await display_release_options(client, event, valid, is_movie=True)
 
-    instances[event.user_id] = valid_releases
-
-    await client.interaction_response_message_edit(event, embed=embed, components=[select, [Button('Abort', custom_id=PLEX_FIX_MISSING_ABORT, style=ButtonStyle.red)]])
-
-@Kiruha.interactions(custom_id=["plex_fix_missing_select_release"])
+@Kiruha.interactions(custom_id=[PLEX_FIX_MISSING_SELECT_RELEASE])
 async def handle_release_selection(client, event):
     await client.interaction_component_acknowledge(event)
-    selected_guid = event.values[0]
-    releases = instances.get(event.user_id, [])
-
-    release = next((r for r in releases if r['guid'] == selected_guid), None)
-    if not release:
-        await client.interaction_response_message_edit(event, content="Selected release not found.")
+    session = instances.get(event.user_id, {})
+    rels = session.get('releases', [])
+    guid = event.values[0]
+    rel = next((r for r in rels if r['guid'] == guid), None)
+    if not rel:
+        await client.interaction_response_message_edit(event, content="Release not found.")
         return
+    session['selected_release'] = rel
+    embed = Embed('Release Info', description=rel.get('title') or rel.get('movieTitles','')[0])
+    quality = rel.get('quality', {}).get('quality', {}).get('name')
+    if quality:
+        embed.add_field('Quality', quality, inline=True)
+    size = rel.get('size', 0)
+    embed.add_field('Size', f"{size/(1024**3):.2f} GB", inline=True)
+    embed.add_field('Indexer', rel.get('indexer', 'Unknown'), inline=True)
+    langs = ', '.join(l.get('name') for l in rel.get('languages', [])) or 'Unknown'
+    embed.add_field('Languages', langs, inline=True)
+    score = rel.get('customFormatScore')
+    if score is not None:
+        embed.add_field('Score', str(score), inline=True)
+    if rel.get('rejections'):
+        embed.add_field('Rejections', '\n'.join(rel['rejections']), inline=False)
+    await client.interaction_response_message_edit(event, embed=embed,
+        components=[[
+            Button('Approve', custom_id=PLEX_FIX_MISSING_APPROVE, style=ButtonStyle.green),
+            Button('Change', custom_id=PLEX_FIX_MISSING_CHANGE_RELEASE, style=ButtonStyle.blue),
+            Button('Abort', custom_id=PLEX_FIX_MISSING_ABORT, style=ButtonStyle.red)
+        ]])
 
-    instances[event.user_id] = release  # Save selected release separately
+@Kiruha.interactions(custom_id=[PLEX_FIX_MISSING_CHANGE_RELEASE])
+async def handle_change_release(client, event):
+    await client.interaction_component_acknowledge(event)
+    session = instances.get(event.user_id, {})
+    releases = session.get('releases', [])
+    is_movie = session.get('is_movie', False)
+    await display_release_options(client, event, releases, is_movie)
 
-    embed = Embed('Release Information', description=release['title'])
-    embed.add_field('Quality', release['quality']['quality']['name'], inline=True)
-    embed.add_field('Size', f"{release['size'] / (1024 ** 3):.2f} GB", inline=True)
-    embed.add_field('Indexer', release['indexer'], inline=True)
-
-    languages = ', '.join(lang['name'] for lang in release.get('languages', [])) or 'Unknown'
-    embed.add_field('Languages', languages, inline=True)
-
-    custom_score = release.get('customFormatScore', 0)
-    embed.add_field('Custom Format Score', str(custom_score), inline=True)
-
-    if release.get('rejections'):
-        embed.add_field('Rejections', '\n'.join(release['rejections']), inline=False)
-
-    approve_button = Button('Approve Download', custom_id='plex_fix_missing_approve', style=ButtonStyle.green)
-    abort_button = Button('Abort', custom_id=PLEX_FIX_MISSING_ABORT, style=ButtonStyle.red)
-
-    await client.interaction_response_message_edit(event, embed=embed, components=[[approve_button, abort_button]])
-
-@Kiruha.interactions(custom_id=["plex_fix_missing_approve"])
+@Kiruha.interactions(custom_id=[PLEX_FIX_MISSING_APPROVE])
 async def handle_approve_download(client, event):
     await client.interaction_component_acknowledge(event)
-    release = instances.get(event.user_id, None)
-
-    if not release:
+    session = instances.get(event.user_id, {})
+    rel = session.get('selected_release')
+    is_movie = session.get('is_movie', False)
+    if not rel:
         await client.interaction_response_message_edit(event, content="No release selected.")
         return
-
-    payload = {
-        "guid": release["guid"],
-        "indexerId": release["indexerId"],
-        "title": release["title"],
-        "protocol": release["protocol"]
-    }
-    await post_to_sonarr_api(client, "release", payload)
-
-    embed = Embed('Download Started', description=f"Downloading: {release['title']}")
-    await client.interaction_response_message_edit(event, embed=embed, components=None)
+    payload = {'guid': rel['guid'], 'indexerId': rel['indexerId'],'title': rel.get('title') or rel.get('movieTitles','')[0],'protocol': rel['protocol']}
+    if is_movie:
+        await post_to_radarr_api(client, 'release', payload)
+    else:
+        await post_to_sonarr_api(client, 'release', payload)
+    await client.interaction_response_message_edit(event,
+        embed=Embed('Download Started', description=f"Downloading: {rel.get('title') or rel.get('movieTitles','')[0]}"),
+        components=None)
 
 @Kiruha.interactions(custom_id=[PLEX_FIX_MISSING_ABORT])
 async def abort_plex_fix_missing(client, event):
     if event.user is not event.message.interaction.user:
         return
-
     await client.interaction_component_acknowledge(event)
     await client.interaction_response_message_delete(event)

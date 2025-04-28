@@ -14,3 +14,5 @@ with EnvGetter() as env:
     OVERSEER_TOKEN = env.get_str("OVERSEER_TOKEN", raise_if_missing_or_empty=True)
     SONARR_URL = env.get_str("SONARR_URL", raise_if_missing_or_empty=True)
     SONARR_TOKEN = env.get_str("SONARR_TOKEN", raise_if_missing_or_empty=True)
+    RADARR_URL = env.get_str("RADARR_URL", raise_if_missing_or_empty=True)
+    RADARR_TOKEN = env.get_str("RADARR_TOKEN", raise_if_missing_or_empty=True)
