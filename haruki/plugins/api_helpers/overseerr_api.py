@@ -1,7 +1,7 @@
 import json
 from ...constants import OVERSEER_URL, OVERSEER_TOKEN
 
-async def get_from_overseer_api(client, api_call, params=None):
+async def get_from_overseerr_api(client, api_call, params=None):
     headers = {
         "x-api-key": OVERSEER_TOKEN,
         "accept": "application/json",
@@ -10,7 +10,7 @@ async def get_from_overseer_api(client, api_call, params=None):
     async with client.http.get(url, headers=headers, params=params) as resp:
         return await resp.json()
 
-async def post_to_overseer_api(client, api_call, payload):
+async def post_to_overseerr_api(client, api_call, payload):
     headers = {
         "x-api-key": OVERSEER_TOKEN,
         "content-type": "application/json",

@@ -2,7 +2,7 @@ import json
 from typing import Optional, Dict, List, Tuple
 from dataclasses import dataclass
 from scarletio import sleep
-
+from urllib.parse import quote_plus
 from ...constants import OVERSEER_URL, OVERSEER_TOKEN
 
 @dataclass
@@ -47,6 +47,7 @@ class OverseerrHelper:
         }
         url = f"{OVERSEER_URL}/api/v1/{endpoint.lstrip('/')}"
         last_error = None
+
         for attempt in range(self.MAX_RETRIES):
             try:
                 if method.upper() == "GET":
@@ -55,15 +56,24 @@ class OverseerrHelper:
                     resp = await self.client.http.post(url, headers=headers, data=json.dumps(payload))
                 else:
                     raise ValueError(f"Unsupported HTTP method {method}")
+
+                # Retry on specific status codes
+                if resp.status == 400 and attempt < self.MAX_RETRIES - 1:
+                    await sleep(self.RETRY_BACKOFF[attempt])
+                    continue
+
                 if resp.status < 200 or resp.status >= 300:
                     raise RuntimeError(f"API error {resp.status} on {method} {endpoint}")
+
                 return await resp.json()
+
             except Exception as e:
                 last_error = e
                 if attempt < self.MAX_RETRIES - 1:
                     await sleep(self.RETRY_BACKOFF[attempt])
-        # all retries failed
+
         raise last_error
+
 
     async def discord_user_to_overseerr_user(self, discord_id: int) -> Optional[int]:
         """
@@ -106,7 +116,11 @@ class OverseerrHelper:
         Search Overseerr for media of given type ('movie' or 'tv').
         Returns a list of MediaSummary objects.
         """
-        params = {"page": 1, "language": "en", "query": query}
+        params = {
+        "page": 1,
+        "language": "en",
+        "query": quote_plus(query)
+        }
         raw = await self._api_request("GET", "search", params=params)
         results: List[MediaSummary] = []
         for item in raw.get("results", []):
@@ -143,6 +157,31 @@ class OverseerrHelper:
         )
         self.cache[key] = detail
         return detail
+    
+    async def is_already_requested(self, media_type: str, media_id: int) -> bool:
+        raw = await self._api_request("GET", f"{media_type}/{media_id}", params={"language": "en"})
+        print(f"Checking if already requested: {media_type}/{media_id}")
+        print(raw)
+        return bool(raw.get("mediaInfo", {}).get("status") in {1, 2, 3, 4, 5})
+
+
+    async def get_media_status(self, media_type: str, media_id: int) -> Optional[int]:
+        """
+        Fetch current media status. Returns status 1–6 or None if not found.
+        """
+        try:
+            raw = await self._api_request("GET", f"{media_type}/{media_id}", params={"language": "en"})
+            media_info = raw.get("mediaInfo")
+            if media_info:
+                return media_info.get("status")
+            return None  # Not yet requested
+        except RuntimeError as e:
+            if "API error 404" in str(e):
+                return None
+            raise
+
+
+
 
     async def request_media(self, media_type: str, media_id: int, overseerr_user_id: int) -> dict:
         """

@@ -68,7 +68,7 @@ async def _schedule_timeout(user_id: int, client, event):
 
 
 @Haruki.interactions(is_global=True, name="plex-request")
-async def cmd_plex_request(client, event, media_type: (['tv','movie'], "Media Type"), media: ("str", "Search Query")):
+async def cmd_plex_request(client, event, media_type: (["tv","movie"], "Media Type"), media: ("str", "Search Query")):
     """Start a new Plex request interaction."""
     # Role check
     if not event.user.has_role(ROLE_PLEX):
@@ -114,14 +114,32 @@ async def on_confirm_request(client, event):
     if not session or session.selected_id is None:
         return
 
+    detail = await session.helper.get_media_info(session.media_type, session.selected_id)
+    detail.poster_url = TMDB_IMAGE_URL + detail.poster_path if detail.poster_path else None
+
+    status = await session.helper.get_media_status(session.media_type, session.selected_id)
+    if status and status in (1, 2, 3, 4, 5):
+        sessions.pop(event.user_id, None)
+        status_labels = {
+            1: ("❔ Unknown Status", 0x999999),
+            2: ("⌛ Pending", 0xffcc00),
+            3: ("🔄 Processing", 0x66ccff),
+            4: ("⚠️ Partial Availability", 0xff9966),
+            5: ("✅ Media Already Available", 0x00cc66)
+        }
+        label, color = status_labels.get(status, ("⚠️ Already Requested", 0xcc9900))
+        embed = Embed(f"{detail.title} ({detail.year})", color=color)
+        embed.add_author(label)
+        embed.add_thumbnail(detail.poster_url or MISSING_POSTER_URL)
+        embed.description = detail.overview
+        return await client.interaction_response_message_edit(event, embed=embed, components=None)
+
     overseerr_user_id = await session.helper.discord_user_to_overseerr_user(event.user_id)
     if overseerr_user_id is None:
         return await client.interaction_response_message_edit(event, content="Your Discord ID is not linked in Overseerr.")
 
     response = await session.helper.request_media(session.media_type, session.selected_id, overseerr_user_id)
 
-    detail = await session.helper.get_media_info(session.media_type, session.selected_id)
-    detail.poster_url = TMDB_IMAGE_URL + detail.poster_path if detail.poster_path else None
     embed = build_detail_embed(detail, session.media_type, event.user.name, response)
 
     sessions.pop(event.user_id, None)
