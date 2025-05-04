@@ -1,9 +1,11 @@
 import json
 from typing import Optional, Dict, List, Tuple
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Optional, Dict
 from scarletio import sleep
 from urllib.parse import quote_plus
 from ...constants import OVERSEER_URL, OVERSEER_TOKEN
+
 
 @dataclass
 class MediaSummary:
@@ -13,33 +15,19 @@ class MediaSummary:
     media_type: str
     overview: str
     poster_path: str
+    extra: Dict = field(default_factory=dict)  
 
 class OverseerrHelper:
-    """
-    A helper client for interacting with the Overseerr API.
-    Provides methods to search media, fetch details, request media,
-    and map Discord user IDs to Overseerr user IDs.
-    """
-
-    # Cache and retry settings
     USER_CACHE_TTL = 3600  # seconds
     MAX_RETRIES = 3
     RETRY_BACKOFF = [0.5, 1, 2]
 
     def __init__(self, client):
         self.client = client
-        # media and detail cache: {"{media_type}_{id}": MediaSummary}
         self.cache: Dict[str, MediaSummary] = {}
-        # discord->overseerr user id cache: {discord_id: (overseerr_id, timestamp)}
         self.user_map_cache: Dict[int, Tuple[int, float]] = {}
 
-    async def _api_request(
-        self,
-        method: str,
-        endpoint: str,
-        params: Optional[Dict] = None,
-        payload: Optional[Dict] = None,
-    ) -> dict:
+    async def _api_request(self, method: str, endpoint: str, params: Optional[Dict] = None, payload: Optional[Dict] = None) -> dict:
         headers = {
             "x-api-key": OVERSEER_TOKEN,
             "accept": "application/json",
@@ -57,7 +45,6 @@ class OverseerrHelper:
                 else:
                     raise ValueError(f"Unsupported HTTP method {method}")
 
-                # Retry on specific status codes
                 if resp.status == 400 and attempt < self.MAX_RETRIES - 1:
                     await sleep(self.RETRY_BACKOFF[attempt])
                     continue
@@ -74,14 +61,8 @@ class OverseerrHelper:
 
         raise last_error
 
-
     async def discord_user_to_overseerr_user(self, discord_id: int) -> Optional[int]:
-        """
-        Map a Discord user ID to an Overseerr user ID by scanning all users.
-        Caches results for USER_CACHE_TTL seconds.
-        """
         from time import time
-        # check cache
         cached = self.user_map_cache.get(discord_id)
         if cached:
             overseerr_id, ts = cached
@@ -97,13 +78,10 @@ class OverseerrHelper:
                 break
             for user in users:
                 overseerr_id = user.get("id")
-                settings = await self._api_request(
-                    "GET", f"user/{overseerr_id}/settings/notifications"
-                )
+                settings = await self._api_request("GET", f"user/{overseerr_id}/settings/notifications")
                 mapped = settings.get("discordId")
                 try:
                     if mapped is not None and int(mapped) == discord_id:
-                        # cache and return
                         self.user_map_cache[discord_id] = (overseerr_id, time())
                         return overseerr_id
                 except (TypeError, ValueError):
@@ -112,15 +90,7 @@ class OverseerrHelper:
         return None
 
     async def search(self, query: str, media_type: str) -> List[MediaSummary]:
-        """
-        Search Overseerr for media of given type ('movie' or 'tv').
-        Returns a list of MediaSummary objects.
-        """
-        params = {
-        "page": 1,
-        "language": "en",
-        "query": quote_plus(query)
-        }
+        params = {"page": 1, "language": "en", "query": quote_plus(query)}
         raw = await self._api_request("GET", "search", params=params)
         results: List[MediaSummary] = []
         for item in raw.get("results", []):
@@ -146,7 +116,18 @@ class OverseerrHelper:
         key = f"{media_type}_{media_id}"
         if key in self.cache:
             return self.cache[key]
+
         raw = await self._api_request("GET", f"{media_type}/{media_id}", params={"language": "en"})
+
+        # Extract requester IDs from mediaInfo.requests
+        media_info = raw.get("mediaInfo", {})
+        requests = media_info.get("requests", [])
+        requester_ids = []
+        for req in requests:
+            user = req.get("requestedBy")
+            if user and "id" in user:
+                requester_ids.append(user["id"])
+
         detail = MediaSummary(
             id=raw.get("id"),
             title=raw.get("title") if media_type == "movie" else raw.get("name"),
@@ -154,39 +135,51 @@ class OverseerrHelper:
             media_type=media_type,
             overview=raw.get("overview", ""),
             poster_path=raw.get("posterPath"),
+            requester_ids=requester_ids,
         )
+
         self.cache[key] = detail
+        print(detail)
         return detail
-    
+
+
     async def is_already_requested(self, media_type: str, media_id: int) -> bool:
         raw = await self._api_request("GET", f"{media_type}/{media_id}", params={"language": "en"})
-        print(f"Checking if already requested: {media_type}/{media_id}")
-        print(raw)
         return bool(raw.get("mediaInfo", {}).get("status") in {1, 2, 3, 4, 5})
 
-
     async def get_media_status(self, media_type: str, media_id: int) -> Optional[int]:
-        """
-        Fetch current media status. Returns status 1–6 or None if not found.
-        """
         try:
             raw = await self._api_request("GET", f"{media_type}/{media_id}", params={"language": "en"})
             media_info = raw.get("mediaInfo")
             if media_info:
                 return media_info.get("status")
-            return None  # Not yet requested
+            return None
         except RuntimeError as e:
             if "API error 404" in str(e):
                 return None
             raise
 
+    async def user_has_requested(self, media_id: int, user_id: int) -> bool:
+        page = 1
+        while True:
+            params = {"take": 50, "filter": "all", "page": page}
+            raw = await self._api_request("GET", "request", params=params)
+            results = raw.get("results", [])
+            if not results:
+                break
 
+            for req in results:
+                media = req.get("media") or {}
+                if media.get("id") == media_id and req.get("requestedBy", {}).get("id") == user_id:
+                    return True
 
+            if len(results) < 50:
+                break
+            page += 1
+
+        return False
 
     async def request_media(self, media_type: str, media_id: int, overseerr_user_id: int) -> dict:
-        """
-        Send a media request on behalf of a user.
-        """
         payload = {
             "mediaType": media_type,
             "mediaId": media_id,
