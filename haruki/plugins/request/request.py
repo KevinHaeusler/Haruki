@@ -1,200 +1,139 @@
 __all__ = ()
 
-from optparse import Option
+from dataclasses import dataclass
+import scarletio
+from hata import Embed, Role
+from hata.ext.slash import Select, Option, InteractionResponse, Button, ButtonStyle, abort
 
-from hata import Embed
-from hata.ext.slash import Select, Option, InteractionResponse, Button, ButtonStyle
-from icecream import ic
+from ...bots import Haruki
+from ...constants import TMDB_IMAGE_URL, MISSING_POSTER_URL
+from ..api_helpers.overseerr_helper import OverseerrHelper, MediaSummary
 
-from haruki.bots import Kiruha
-from haruki.plugins.overseerr.overseerr_search import OverseerrTvSearch, OverseerrMovieSearch, OverseerrSearch
-from hata.ext.slash import abort
+# Precreate Plex role
+ROLE_PLEX = Role.precreate(1228676841057816707)
 
-PLEX_REQUEST_ID = "plex_request"
+# Interaction custom IDs
+PLEX_REQUEST_SELECT = "plex_request_select"
+PLEX_REQUEST_CONFIRM = "plex_request_confirm"
 PLEX_REQUEST_ABORT = "plex_request_abort"
-PLEX_REQUEST_REQUEST = "plex_request_request"
 
-MEDIA_TYPES = [
-    "tv",
-    "movie",
-]
+# Per-user session state
+@dataclass
+class RequestSession:
+    helper: OverseerrHelper
+    media_type: str
+    results: list[MediaSummary]
+    selected_id: int | None = None
 
-BUTTON_REQUEST = Button("Request", custom_id=PLEX_REQUEST_REQUEST, style=ButtonStyle.green)
+sessions: dict[int, RequestSession] = {}
+
+# Buttons
+BUTTON_CONFIRM = Button("Request", custom_id=PLEX_REQUEST_CONFIRM, style=ButtonStyle.green)
 BUTTON_ABORT = Button("Abort", custom_id=PLEX_REQUEST_ABORT, style=ButtonStyle.red)
 
-instances = {}
 
-global_results = {}
-last_selected_media = {}
+def build_results_select(results: list[MediaSummary], selected_id: int | None = None) -> Select:
+    options = [
+        Option(str(m.id), f"{m.title} ({m.year})", default=(m.id == selected_id))
+        for m in results
+    ]
+    return Select(options, custom_id=PLEX_REQUEST_SELECT)
 
-tmdb_image_url = "https://image.tmdb.org/t/p/w300_and_h450_face"
 
-
-def build_embed_list(results, selected_media):
-    options = []
-    for element in results:
-        name = element["title"]
-        year = element["year"]
-        id = element["id"]
-        if name:
-            title = f"{name} ({year})"
-            if str(id) == str(selected_media):
-                options.append(Option(str(id), title, default=True))
-                selected_id = id
-
-            else:
-                options.append(Option(str(id), title))
-    if selected_media is None:
-        select = [
-            Select(
-                options,
-                custom_id=PLEX_REQUEST_ID,
-            ),
-            [
-                Button("Abort", custom_id=PLEX_REQUEST_ABORT, style=ButtonStyle.red),
-            ],
-        ]
+def build_detail_embed(detail: MediaSummary, media_type: str, user_name: str = None, response: dict = None) -> Embed:
+    if response:
+        total = response.get('requestedBy', {}).get('requestCount', 0) + 1
+        embed = Embed(f"{detail.title} ({detail.year})", color=0x9c5db3)
+        embed.add_author(f"{media_type.title()} Request Sent")
+        embed.add_thumbnail(detail.poster_url or MISSING_POSTER_URL)
+        embed.description = detail.overview
+        embed.add_field("Requested By", user_name or "Unknown", True)
+        embed.add_field("Request Status", "Processing", True)
+        embed.add_field("Total Requests", total, True)
     else:
-        select = [
-            Select(
-                options,
-                custom_id=PLEX_REQUEST_ID,
-            ),
-            [
-                Button("Request", custom_id=PLEX_REQUEST_REQUEST, style=ButtonStyle.green),
-                Button("Abort", custom_id=PLEX_REQUEST_ABORT, style=ButtonStyle.red),
-            ],
-        ]
-    return select
+        embed = Embed(f"{detail.title} ({detail.year})")
+        embed.add_image(detail.poster_url or MISSING_POSTER_URL)
+        embed.description = detail.overview
+    return embed
 
 
-@Kiruha.interactions(is_global=True, name="plex-request")
-async def initiate_plex_request(client,
-                                event, media_type: (MEDIA_TYPES, "Pick Media Type"),
-                                media: ("str", 'Enter the media to search for')
-                                ):
-    if media_type == "tv":
-        media_search = OverseerrTvSearch()
-    elif media_type == "movie":
-        media_search = OverseerrMovieSearch()
-    else:
-        return abort(f"Something went wrong with the search: {media_type} {media}")
-
-    results = await media_search.get_search_results(media, media_type)
-    if len(results) == 0:
-        return abort(f"No results found for {media}!")
-    global_results[event.user_id] = results  # use user_id as key
-    instances[event.user_id] = media_search
-
-    embed = Embed(f'Requesting {media}')
-    embed.description = 'Please select your desired media from the list below'
-    select = build_embed_list(results, selected_media=None)
-    return InteractionResponse(embed=embed, components=select)
+async def _schedule_timeout(user_id: int, client, event):
+    await scarletio.sleep(180)
+    if user_id in sessions:
+        try:
+            await client.interaction_response_message_delete(event)
+        except:
+            pass
+        sessions.pop(user_id, None)
 
 
-@Kiruha.interactions(custom_id=[PLEX_REQUEST_REQUEST, PLEX_REQUEST_ID])
-async def handle_media_selection(event):
-    # Only allow the original interaction user to interact with the buttons
-    if event.message.interaction.user_id != event.user_id:
-        return
+@Haruki.interactions(is_global=True, name="plex-request")
+async def cmd_plex_request(client, event, media_type: (['tv','movie'], "Media Type"), media: ("str", "Search Query")):
+    """Start a new Plex request interaction."""
+    # Role check
+    if not event.user.has_role(ROLE_PLEX):
+        return abort("You need the Plex role to use this command.")
+    await client.interaction_response_message_create(event, content="🔍 Searching Overseerr...")
+    scarletio.create_task(_schedule_timeout(event.user_id, client, event))
 
-    selected_media_list = event.values
+    helper = OverseerrHelper(client)
+    helper.media_type = media_type
+    results = await helper.search(media, media_type)
+    if not results:
+        return await client.interaction_response_message_edit(event, content=f"No results for '{media}'.")
 
-    # Ensure valid media selection
-    if not selected_media_list:
-        return
+    sessions[event.user_id] = RequestSession(helper, media_type, results)
 
-    media_search = instances.get(event.user_id)  # Retrieve the cached media_search instance
-    selected_media = selected_media_list[0]
-    media_list = media_search.get_media_list()
-
-    last_selected_media[event.user_id] = selected_media  # Store the last selected media
-
-    # Rebuild the selection list
-    select = build_embed_list(media_list, selected_media=selected_media)
-
-    # Fetch detailed media info using cache mechanism
-    for element in media_list:
-        if str(element["id"]) == str(selected_media):
-            media_type = element["media_type"]
-            break
-
-    media_info = await media_search.get_media_info(media_type, selected_media)  # Cache used here
-
-    # Handle media poster image
-    if media_info["posterPath"] is None:
-        url = "https://www.niwrc.org/sites/default/files/images/resource/missing_persons_flyer.jpeg"
-    else:
-        url = tmdb_image_url + media_info["posterPath"]
-
-    # Create embed with media information
-    embed = Embed(f'{media_info["title"]} ({media_info["year"].split("-")[0]})')
-    embed.add_image(url)
-    embed.description = f'{media_info["overview"]} \n'
-
-    yield InteractionResponse(embed=embed, components=select)
+    embed = Embed(f"Results for '{media}'", description="Select an item to view details.")
+    select = build_results_select(results)
+    return await client.interaction_response_message_edit(event, embed=embed, components=[select, [BUTTON_ABORT]])
 
 
-@Kiruha.interactions(custom_id=[PLEX_REQUEST_REQUEST])
-async def send_plex_request(client, event):
-    ic(event)
-    # Allow closing for the source user
-    if event.user is not event.message.interaction.user:
-        return
-    overseer_instance = OverseerrSearch()
-    overseer_id = await overseer_instance.discord_user_to_overseerr_user(
-        event.user_id)  # media_search = instances.get(event.user_id)
-
-    # Retrieve the last selected media for this user
-    selected_media = last_selected_media.get(event.user_id)
-    media_search = instances.get(event.user_id)  # Retrieve the cached media_search instance
-    media_list = media_search.get_media_list()
-    # ic the last selected media value for debugging
-    ic(f"Last selected media: {selected_media}")
-
-    for element in media_list:
-        if str(element["id"]) == str(selected_media):
-            media_type = element["media_type"]
-            break
-
-    media_info = await media_search.get_media_info(media_type, selected_media)
-    request = await overseer_instance.request_selected_media(media_type, selected_media, overseer_id)
-
-    # Handle media poster image
-    if media_info["posterPath"] is None:
-        url = "https://www.niwrc.org/sites/default/files/images/resource/missing_persons_flyer.jpeg"
-    else:
-        url = tmdb_image_url + media_info["posterPath"]
-
-    # Create embed with media information
-    embed = Embed(f'{media_info["title"]} ({media_info["year"].split("-")[0]})', color=0x9c5db3)
-    embed.add_author('Movie Request Sent')
-    embed.add_thumbnail(url)
-    embed.description = f'{media_info["overview"]} \n'
-    embed.add_field("Requested By", event.user.name, True)
-    embed.add_field("Request Status", "Processing", True)
-    embed.add_field("Total Requests", request.get('requestedBy', {}).get('requestCount') + 1, True)
-
-    return InteractionResponse(embed, components=None)
-
-
-@Kiruha.interactions(custom_id=[PLEX_REQUEST_ABORT])
-async def abort_plex_request(client, event):
-    # Allow closing for the source user
-    if event.user is not event.message.interaction.user:
-        return
-
-    # We can use `yield` as well for acknowledging it.
+@Haruki.interactions(custom_id=[PLEX_REQUEST_SELECT])
+async def on_select_media(client, event):
+    """Handle media selection and allow reselection."""
     await client.interaction_component_acknowledge(event)
+    session = sessions.get(event.user_id)
+    if not session:
+        return
+    session.selected_id = int(event.values[0])
+
+    detail = await session.helper.get_media_info(session.media_type, session.selected_id)
+    detail.poster_url = TMDB_IMAGE_URL + detail.poster_path if detail.poster_path else None
+
+    select = build_results_select(session.results, selected_id=session.selected_id)
+    embed = build_detail_embed(detail, session.media_type)
+    return await client.interaction_response_message_edit(event, embed=embed, components=[select, [BUTTON_CONFIRM, BUTTON_ABORT]])
+
+
+@Haruki.interactions(custom_id=[PLEX_REQUEST_CONFIRM])
+async def on_confirm_request(client, event):
+    """Confirm and send media request."""
+    await client.interaction_component_acknowledge(event)
+    session = sessions.get(event.user_id)
+    if not session or session.selected_id is None:
+        return
+
+    overseerr_user_id = await session.helper.discord_user_to_overseerr_user(event.user_id)
+    if overseerr_user_id is None:
+        return await client.interaction_response_message_edit(event, content="Your Discord ID is not linked in Overseerr.")
+
+    response = await session.helper.request_media(session.media_type, session.selected_id, overseerr_user_id)
+
+    detail = await session.helper.get_media_info(session.media_type, session.selected_id)
+    detail.poster_url = TMDB_IMAGE_URL + detail.poster_path if detail.poster_path else None
+    embed = build_detail_embed(detail, session.media_type, event.user.name, response)
+
+    sessions.pop(event.user_id, None)
+    return await client.interaction_response_message_edit(event, embed=embed, components=None)
+
+
+@Haruki.interactions(custom_id=[PLEX_REQUEST_ABORT])
+async def on_abort(client, event):
+    """Abort and delete the interaction, clearing session."""
+    # Allow original user or admin
+    if event.user_id != event.message.interaction.user_id and not event.user_permissions.administrator:
+        return
+    await client.interaction_component_acknowledge(event)
+    sessions.pop(event.user_id, None)
     await client.interaction_response_message_delete(event)
-
-
-@Kiruha.interactions(is_global=True)
-async def get_overseerr_id(event,
-                           user: ('user', 'To who?'),
-                           ):
-    overseer_instance = OverseerrSearch()
-    overseerr_id = await overseer_instance.discord_user_to_overseerr_user(user.id)
-    if overseerr_id == 34:
-        return 'This user does not have his DiscordID mapped to Overseerr'
-    return f'The Overseer ID for {user:f} is: {overseerr_id}'

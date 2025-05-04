@@ -1,7 +1,7 @@
 __all__ = ()
 
-from hata import Embed
-from hata.ext.slash import Select, Option, InteractionResponse, Button, ButtonStyle
+from hata import Embed, Role
+from hata.ext.slash import Select, Option, InteractionResponse, Button, ButtonStyle, abort
 from icecream import ic
 
 from ...bots import Kiruha
@@ -26,6 +26,9 @@ MEDIA_TYPES = ["tv", "movie"]
 LISTING_MODES = ["missing only", "all files"]
 PAGE_SIZE = 25
 
+# Precreate Plex role
+ROLE_PLEX = Role.precreate(1228676841057816707)
+
 @Kiruha.interactions(is_global=True, name="plex-fix-missing")
 async def initiate_plex_fix_missing(
     client,
@@ -35,6 +38,9 @@ async def initiate_plex_fix_missing(
     listing_mode: (LISTING_MODES, "Choose listing mode: missing only or all files") = "missing only",
 ):
     """Fix missing Plex media (missing only or all files)."""
+    # Role check
+    if not event.user.has_role(ROLE_PLEX):
+        return abort("You need the Plex role to use this command.")
     await client.interaction_response_message_create(event, content='Searching...')
     ic(media_type, media, listing_mode)
     is_movie = (media_type == "movie")
@@ -207,6 +213,8 @@ async def display_release_options(client, event, releases, is_movie):
         description='Choose a release to download'
     )
     select = Select(options, custom_id=PLEX_FIX_MISSING_SELECT_RELEASE)
+    session = instances[event.user_id]  
+    session['select_component'] = select
     await client.interaction_response_message_edit(
         event,
         embed=embed,
@@ -252,14 +260,18 @@ async def handle_release_selection(client, event):
         embed.add_field('Score', str(score), inline=True)
     if rel.get('rejections'):
         embed.add_field('Rejections', '\n'.join(rel['rejections']), inline=False)
+    
+    select = session['select_component']
     await client.interaction_response_message_edit(
         event,
         embed=embed,
-        components=[[
-            Button('Approve', custom_id=PLEX_FIX_MISSING_APPROVE, style=ButtonStyle.green),
-            Button('Change', custom_id=PLEX_FIX_MISSING_CHANGE_RELEASE, style=ButtonStyle.blue),
-            Button('Abort', custom_id=PLEX_FIX_MISSING_ABORT, style=ButtonStyle.red)
-        ]]
+        components=[
+            select,
+            [ 
+              Button('Approve', custom_id=PLEX_FIX_MISSING_APPROVE, style=ButtonStyle.green),
+              Button('Abort',   custom_id=PLEX_FIX_MISSING_ABORT,   style=ButtonStyle.red)
+            ]
+        ]
     )
 
 
@@ -300,7 +312,7 @@ async def handle_approve_download(client, event):
 
 @Kiruha.interactions(custom_id=[PLEX_FIX_MISSING_ABORT])
 async def abort_plex_fix_missing(client, event):
-    if event.user is not event.message.interaction.user:
+    if event.user_id != event.message.interaction.user_id and not event.user_permissions.administrator:
         return
     await client.interaction_component_acknowledge(event)
     await client.interaction_response_message_delete(event)

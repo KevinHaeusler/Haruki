@@ -1,7 +1,9 @@
 __all__ = (
-    "HARUKI_TOKEN", "KIRUHA_TOKEN", "TAUTULLI_TOKEN", "TAUTULLI_URL", "TAUTULLI_IMAGE", "OVERSEER_TOKEN",
-    "OVERSEER_URL", "SONARR_URL", "SONARR_TOKEN")
-
+    "HARUKI_TOKEN", "KIRUHA_TOKEN", "TAUTULLI_TOKEN", "TAUTULLI_URL", "TAUTULLI_IMAGE",
+    "OVERSEER_TOKEN", "OVERSEER_URL", "SONARR_URL", "SONARR_TOKEN",
+    "RADARR_URL", "RADARR_TOKEN",
+    "TMDB_IMAGE_URL", "MISSING_POSTER_URL",
+)
 from hata.env import EnvGetter
 
 with EnvGetter() as env:
@@ -16,3 +18,5 @@ with EnvGetter() as env:
     SONARR_TOKEN = env.get_str("SONARR_TOKEN", raise_if_missing_or_empty=True)
     RADARR_URL = env.get_str("RADARR_URL", raise_if_missing_or_empty=True)
     RADARR_TOKEN = env.get_str("RADARR_TOKEN", raise_if_missing_or_empty=True)
+    TMDB_IMAGE_URL = env.get_str("TMDB_IMAGE_URL", raise_if_missing_or_empty=True)
+    MISSING_POSTER_URL = env.get_str("MISSING_POSTER_URL", raise_if_missing_or_empty=True)
