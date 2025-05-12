@@ -1,8 +1,9 @@
 __all__ = ()
 
-import scarletio
+from scarletio import sleep
 from dataclasses import dataclass
 from hata import Embed
+from icecream import ic
 from hata.ext.slash import Button, ButtonStyle, abort
 from datetime import datetime
 from ...bots import Kiruha
@@ -66,17 +67,19 @@ async def get_requests(
 
     lines = []
     lines.append(f"**Status — Title — Requested Date**")
-
+   
     for req in requests_list:
         media = req.get("media") or {}
         raw_type = (req.get("type") or media.get("mediaType") or "").lower()
         media_id = media.get("tmdbId")
         title, year = "Unknown", ""
-        try:
-            info = await helper.get_media_info(raw_type, media_id)
+        info = await fetch_media_info_with_retry(helper, raw_type, media_id)
+        if info:
             title, year = info.title, info.year
-        except:
-            pass
+        else:
+            title = req.get("media", {}).get("title") or req.get("title") or "Unknown"
+            year = req.get("media", {}).get("releaseDate", "")[:4] or ""
+
         created_raw = req.get("createdAt")
         if created_raw:
             try:
@@ -148,3 +151,14 @@ async def abort_overseerr_requests(client, event):
         embed=None,
         components=None
     )
+
+async def fetch_media_info_with_retry(helper, raw_type, media_id, retries=3, delay=2.0):
+    for attempt in range(retries):
+        try:
+            info = await helper.get_media_info(raw_type, media_id)
+            if info and hasattr(info, "title"):
+                return info
+        except Exception as e:
+            print(f"[Attempt {attempt+1}] Failed to get media info: {e}")
+        await sleep(delay)
+    return None

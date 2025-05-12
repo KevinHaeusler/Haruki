@@ -122,11 +122,7 @@ class OverseerrHelper:
         # Extract requester IDs from mediaInfo.requests
         media_info = raw.get("mediaInfo", {})
         requests = media_info.get("requests", [])
-        requester_ids = []
-        for req in requests:
-            user = req.get("requestedBy")
-            if user and "id" in user:
-                requester_ids.append(user["id"])
+
 
         detail = MediaSummary(
             id=raw.get("id"),
@@ -135,7 +131,6 @@ class OverseerrHelper:
             media_type=media_type,
             overview=raw.get("overview", ""),
             poster_path=raw.get("posterPath"),
-            requester_ids=requester_ids,
         )
 
         self.cache[key] = detail

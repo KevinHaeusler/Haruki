@@ -2,6 +2,7 @@ __all__ = ()
 
 from dataclasses import dataclass, field
 import scarletio
+from icecream import ic
 from hata import Embed, Role
 from hata.ext.slash import Select, Option, InteractionResponse, Button, ButtonStyle, abort
 
@@ -134,6 +135,7 @@ async def on_confirm_request(client, event):
         return
 
     raw = await session.helper._api_request("GET", f"{session.media_type}/{session.selected_id}", params={"language": "en"})
+    ic(raw)
     detail = MediaSummary(
         id=raw.get("id"),
         title=raw.get("title") if session.media_type == "movie" else raw.get("name"),
