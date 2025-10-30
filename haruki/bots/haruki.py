@@ -35,4 +35,4 @@ async def ping_uptime_service(client):
 @Haruki.events
 async def ready(client):
     print(f'{client:f} is ready!')
-    create_task(ping_uptime_service(client))
+    #create_task(ping_uptime_service(client))
