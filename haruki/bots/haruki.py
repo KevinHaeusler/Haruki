@@ -11,7 +11,6 @@ Haruki = Client(
     extensions=["slash"],
 )
 
-
 @Haruki.events
 async def ready(client):
     print(f'{client:f} is ready!')
